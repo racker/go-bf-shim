@@ -75,7 +75,7 @@ func forwardToBlueflood(obs *observations.Observation) {
 
 			log.Printf("%s", string(m))
 
-			buf := &bytes.Buffer{}
+			buf := bytes.NewBuffer(m)
 			req, err := http.NewRequest("POST", *BluefloodUrl, buf)
 			req.Header.Set("Content-Type", "application/json")
 
