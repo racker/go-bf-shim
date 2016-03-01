@@ -1,29 +1,29 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"bufio"
-	"os"
-	"observations"
-	"encoding/json"
-	"strings"
-	"flag"
-	"net/http"
 	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
 	"io/ioutil"
+	"log"
+	"net/http"
+	"observations"
+	"os"
+	"strings"
 )
 
 var BluefloodIngestionTtl = flag.Int("bluefloodIngestionTTL", 172800, "How long the data lives in Blueflood")
 var BluefloodDumpPath = flag.String("dumpPath", "dump.json", "Where to find the JSON dump, if reading from a file.")
-var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest/multi", "Where Blueflood lives on the Internet")
+var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest", "Where Blueflood lives on the Internet")
 
 type BluefloodMetric struct {
-	TenantId	*string	`json:"tenantId"`
-	CollectionTime	int64	`json:"collectionTime"`
-	TtlInSeconds	int	`json:"ttlInSeconds"`
-	MetricValue	interface{}	`json:"metricValue"`
-	MetricName	string	`json:"metricName"`
+	TenantId       *string `json:"tenantId"`
+	CollectionTime int64   `json:"collectionTime"`
+	TtlInSeconds   int     `json:"ttlInSeconds"`
+	MetricValue    float64 `json:"metricValue"`
+	MetricName     string  `json:"metricName"`
 }
 
 func getMetricName(name string, obs *observations.Observation) string {
@@ -51,31 +51,37 @@ func forwardToBlueflood(obs *observations.Observation) {
 	tenantId := obs.TenantId
 	collectionTime := obs.Timestamp
 
-	client := &http.Client{}
-
 	for metricName, metric := range obs.Metrics {
 		metricName := getMetricName(metricName, obs)
 
-		v, isNumeric := metric.Value.(float64)
+		v, isNumeric := (metric.Value).(float64)
 		if !isNumeric {
 			continue
 		}
 
-		m, err := json.Marshal(&BluefloodMetric{
-			TenantId: tenantId,
-			CollectionTime: collectionTime,
-			TtlInSeconds: *BluefloodIngestionTtl,
-			MetricValue: v,
-			MetricName: metricName,
-		})
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("%s", string(m))
-
 		if metric.Value != nil {
-			resp, err := client.Post(*BluefloodUrl, "application/json", bytes.NewReader(m))
+			m, err := json.Marshal([]*BluefloodMetric{
+				&BluefloodMetric{
+					TenantId:       tenantId,
+					CollectionTime: collectionTime,
+					TtlInSeconds:   *BluefloodIngestionTtl,
+					MetricValue:    v,
+					MetricName:     metricName,
+				},
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			log.Printf("%s", string(m))
+
+			buf := &bytes.Buffer{}
+			req, err := http.NewRequest("POST", *BluefloodUrl, buf)
+			req.Header.Set("Content-Type", "application/json")
+
+			c := &http.Client{}
+
+			resp, err := c.Do(req)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -91,7 +97,6 @@ func forwardToBlueflood(obs *observations.Observation) {
 	}
 }
 
-
 func relayJsonToBlueflood(js []byte) {
 	var o *observations.Observation
 
@@ -102,7 +107,6 @@ func relayJsonToBlueflood(js []byte) {
 
 	forwardToBlueflood(o)
 }
-
 
 func main() {
 	flag.Parse()
@@ -134,4 +138,3 @@ func main() {
 		relayJsonToBlueflood([]byte(scanner.Text()))
 	}
 }
-

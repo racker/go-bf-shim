@@ -23,4 +23,3 @@ type ObservationMetric struct {
 	Value interface{} `json:"value"`
 	Unit  string      `json:"unit"`
 }
-
