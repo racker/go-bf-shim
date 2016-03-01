@@ -79,7 +79,10 @@ func forwardToBlueflood(obs *observations.Observation) {
 			req, err := http.NewRequest("POST", *BluefloodUrl, buf)
 			req.Header.Set("Content-Type", "application/json")
 
-			c := &http.Client{}
+			tr := &http.Transport{
+				DisableCompression: true,
+			}
+			c := &http.Client{Transport: tr}
 
 			resp, err := c.Do(req)
 			if err != nil {
