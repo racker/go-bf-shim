@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/rackspace/gophercloud"
+	"github.com/rackspace/gophercloud/openstack"
+	"github.com/spf13/viper"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,7 +23,12 @@ var BluefloodIngestionTtl = flag.Int("bluefloodIngestionTTL", 172800, "How long 
 var BluefloodDumpPath = flag.String("dumpPath", "dump.json", "Where to find the JSON dump, if reading from a file.")
 var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest/multi", "Where Blueflood lives on the Internet")
 var Jobs = flag.Int("jobs", 1, "How many concurrent connections to establish to Blueflood")
-var AuthToken = flag.String("authToken", "", "Identity authentication token to use to auth against Blueflood")
+
+// Auth
+var UseAuth = flag.Boolean("useAuth", false, "Do you want to auth?")
+var ApiKey = flag.String("apiKey", "password", "Api key or password to authenticate against identity with.")
+var BfUsername = flag.String("bfUsername", "fakename", "Blueflood username to authenticate with")
+var IdentityUrl = flag.String("identityUrl", "https://identity.api.rackspacecloud.com/v2.0", "Identity url to use [optional]")
 
 type BluefloodMetric struct {
 	TenantId       *string `json:"tenantId"`
@@ -43,6 +51,19 @@ func (bfb *BluefloodBuffer) enqueue(m *BluefloodMetric) {
 	}
 }
 
+func getAuthToken() string {
+	opts := gophercloud.AuthOptions{
+		IdentityEndpoint: IdentityUrl,
+		Username:         BfUsername,
+		Password:         ApiKey,
+	}
+	provider, err := openstack.AuthenticatedClient(opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return provider.TokenId
+}
+
 func (bfb *BluefloodBuffer) send() {
 	m, err := json.Marshal(bfb.queue)
 	if err != nil {
@@ -54,8 +75,10 @@ func (bfb *BluefloodBuffer) send() {
 	buf := bytes.NewBuffer(m)
 	req, err := http.NewRequest("POST", *BluefloodUrl, buf)
 	req.Header.Set("Content-Type", "application/json")
-	if AuthToken != nil {
-		req.Header.Set("X-Auth-Token", *AuthToken)
+
+	if UseAuth {
+		authToken := getAuthToken()
+		req.Header.Set("X-Auth-Token", authToken)
 	}
 
 	tr := &http.Transport{
@@ -139,15 +162,15 @@ func relayJsonToBlueflood(js []byte) {
 
 type Job struct {
 	jsonInput chan []byte
-	fin chan bool
-	wg *sync.WaitGroup
+	fin       chan bool
+	wg        *sync.WaitGroup
 }
 
 func newJob(waitGroup *sync.WaitGroup) *Job {
-	return &Job {
+	return &Job{
 		jsonInput: make(chan []byte),
-		fin: make(chan bool),
-		wg: waitGroup,
+		fin:       make(chan bool),
+		wg:        waitGroup,
 	}
 }
 
