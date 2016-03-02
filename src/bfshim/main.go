@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/rackspace/gophercloud"
+	"github.com/rackspace/gophercloud/openstack"
+	"github.com/spf13/viper"
 	"io"
 	"io/ioutil"
 	"log"
@@ -14,9 +17,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"github.com/spf13/viper"
-    "github.com/rackspace/gophercloud"
-    "github.com/rackspace/gophercloud/openstack"
 )
 
 var BluefloodIngestionTtl = flag.Int("bluefloodIngestionTTL", 172800, "How long the data lives in Blueflood")
@@ -24,7 +24,7 @@ var BluefloodDumpPath = flag.String("dumpPath", "dump.json", "Where to find the 
 var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest/multi", "Where Blueflood lives on the Internet")
 var Jobs = flag.Int("jobs", 1, "How many concurrent connections to establish to Blueflood")
 
-// Auth 
+// Auth
 var UseAuth = flag.Boolean("useAuth", false, "Do you want to auth?")
 var ApiKey = flag.String("apiKey", "password", "Api key or password to authenticate against identity with.")
 var BfUsername = flag.String("bfUsername", "fakename", "Blueflood username to authenticate with")
@@ -54,15 +54,15 @@ func (bfb *BluefloodBuffer) enqueue(m *BluefloodMetric) {
 func getAuthToken() string {
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: IdentityUrl,
-		Username: BfUsername,
-		Password: ApiKey,
+		Username:         BfUsername,
+		Password:         ApiKey,
 	}
 	provider, err := openstack.AuthenticatedClient(opts)
-    if err != nil {
-            log.Fatal(err)
-    }
-    return provider.TokenId
-} 
+	if err != nil {
+		log.Fatal(err)
+	}
+	return provider.TokenId
+}
 
 func (bfb *BluefloodBuffer) send() {
 	m, err := json.Marshal(bfb.queue)
@@ -75,7 +75,7 @@ func (bfb *BluefloodBuffer) send() {
 	buf := bytes.NewBuffer(m)
 	req, err := http.NewRequest("POST", *BluefloodUrl, buf)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	if UseAuth {
 		authToken := getAuthToken()
 		req.Header.set("X-Auth-Token", authToken)
@@ -162,15 +162,15 @@ func relayJsonToBlueflood(js []byte) {
 
 type Job struct {
 	jsonInput chan []byte
-	fin chan bool
-	wg *sync.WaitGroup
+	fin       chan bool
+	wg        *sync.WaitGroup
 }
 
 func newJob(waitGroup *sync.WaitGroup) *Job {
-	return &Job {
+	return &Job{
 		jsonInput: make(chan []byte),
-		fin: make(chan bool),
-		wg: waitGroup,
+		fin:       make(chan bool),
+		wg:        waitGroup,
 	}
 }
 
