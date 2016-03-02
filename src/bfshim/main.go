@@ -50,7 +50,7 @@ func getMetricName(name string, obs *observations.Observation) string {
 func forwardToBlueflood(obs *observations.Observation) {
 	tenantId := obs.TenantId
 	collectionTime := obs.Timestamp
-	metrics := make([]*BluefloodMetric)
+	metrics := make([]*BluefloodMetric, 0)
 
 	for metricName, metric := range obs.Metrics {
 		metricName := getMetricName(metricName, obs)
