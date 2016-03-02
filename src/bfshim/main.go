@@ -20,6 +20,7 @@ var BluefloodIngestionTtl = flag.Int("bluefloodIngestionTTL", 172800, "How long 
 var BluefloodDumpPath = flag.String("dumpPath", "dump.json", "Where to find the JSON dump, if reading from a file.")
 var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest/multi", "Where Blueflood lives on the Internet")
 var Jobs = flag.Int("jobs", 1, "How many concurrent connections to establish to Blueflood")
+var AuthToken = flag.String("authToken", "", "Identity authentication token to use to auth against Blueflood")
 
 type BluefloodMetric struct {
 	TenantId       *string `json:"tenantId"`
@@ -53,6 +54,9 @@ func (bfb *BluefloodBuffer) send() {
 	buf := bytes.NewBuffer(m)
 	req, err := http.NewRequest("POST", *BluefloodUrl, buf)
 	req.Header.Set("Content-Type", "application/json")
+	if AuthToken != nil {
+		req.Header.Set("X-Auth-Token", *AuthToken)
+	}
 
 	tr := &http.Transport{
 		DisableCompression: true,
