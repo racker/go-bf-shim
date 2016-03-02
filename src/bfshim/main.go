@@ -16,7 +16,7 @@ import (
 
 var BluefloodIngestionTtl = flag.Int("bluefloodIngestionTTL", 172800, "How long the data lives in Blueflood")
 var BluefloodDumpPath = flag.String("dumpPath", "dump.json", "Where to find the JSON dump, if reading from a file.")
-var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest", "Where Blueflood lives on the Internet")
+var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacecloud.com/v2.0/706456/ingest/multi", "Where Blueflood lives on the Internet")
 
 type BluefloodMetric struct {
 	TenantId       *string `json:"tenantId"`
@@ -50,6 +50,7 @@ func getMetricName(name string, obs *observations.Observation) string {
 func forwardToBlueflood(obs *observations.Observation) {
 	tenantId := obs.TenantId
 	collectionTime := obs.Timestamp
+	metrics := make([]*BluefloodMetric)
 
 	for metricName, metric := range obs.Metrics {
 		metricName := getMetricName(metricName, obs)
@@ -60,42 +61,44 @@ func forwardToBlueflood(obs *observations.Observation) {
 		}
 
 		if metric.Value != nil {
-			m, err := json.Marshal([]*BluefloodMetric{
-				&BluefloodMetric{
-					TenantId:       tenantId,
-					CollectionTime: collectionTime,
-					TtlInSeconds:   *BluefloodIngestionTtl,
-					MetricValue:    v,
-					MetricName:     metricName,
-				},
+			metrics = append(metrics, &BluefloodMetric{
+				TenantId:       tenantId,
+				CollectionTime: collectionTime,
+				TtlInSeconds:   *BluefloodIngestionTtl,
+				MetricValue:    v,
+				MetricName:     metricName,
 			})
+		}
+	}
+
+	if len(metrics) > 0 {
+		m, err := json.Marshal(metrics)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("%s", string(m))
+
+		buf := bytes.NewBuffer(m)
+		req, err := http.NewRequest("POST", *BluefloodUrl, buf)
+		req.Header.Set("Content-Type", "application/json")
+
+		tr := &http.Transport{
+			DisableCompression: true,
+		}
+		c := &http.Client{Transport: tr}
+
+		resp, err := c.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if (resp.StatusCode < 200) || (300 <= resp.StatusCode) {
+			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalf("Error trying to read body of HTTP error response: %s", err)
 			}
-
-			log.Printf("%s", string(m))
-
-			buf := bytes.NewBuffer(m)
-			req, err := http.NewRequest("POST", *BluefloodUrl, buf)
-			req.Header.Set("Content-Type", "application/json")
-
-			tr := &http.Transport{
-				DisableCompression: true,
-			}
-			c := &http.Client{Transport: tr}
-
-			resp, err := c.Do(req)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if (resp.StatusCode < 200) || (300 <= resp.StatusCode) {
-				body, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					log.Fatalf("Error trying to read body of HTTP error response: %s", err)
-				}
-				log.Printf("Error body: %q", string(body))
-				log.Fatalf("Expected 2xx response code; got %d", resp.StatusCode)
-			}
+			log.Printf("Error body: %q", string(body))
+			log.Fatalf("Expected 2xx response code; got %d", resp.StatusCode)
 		}
 	}
 }
