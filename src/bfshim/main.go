@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
-	"github.com/spf13/viper"
 	"io"
 	"io/ioutil"
 	"log"
@@ -25,10 +24,12 @@ var BluefloodUrl = flag.String("url", "http://qe01.metrics-ingest.api.rackspacec
 var Jobs = flag.Int("jobs", 1, "How many concurrent connections to establish to Blueflood")
 
 // Auth
-var UseAuth = flag.Boolean("useAuth", false, "Do you want to auth?")
+var UseAuth = flag.Bool("useAuth", false, "Do you want to auth?")
 var ApiKey = flag.String("apiKey", "password", "Api key or password to authenticate against identity with.")
 var BfUsername = flag.String("bfUsername", "fakename", "Blueflood username to authenticate with")
 var IdentityUrl = flag.String("identityUrl", "https://identity.api.rackspacecloud.com/v2.0", "Identity url to use [optional]")
+
+var cachedToken string
 
 type BluefloodMetric struct {
 	TenantId       *string `json:"tenantId"`
@@ -53,15 +54,15 @@ func (bfb *BluefloodBuffer) enqueue(m *BluefloodMetric) {
 
 func getAuthToken() string {
 	opts := gophercloud.AuthOptions{
-		IdentityEndpoint: IdentityUrl,
-		Username:         BfUsername,
-		Password:         ApiKey,
+		IdentityEndpoint: *IdentityUrl,
+		Username:         *BfUsername,
+		Password:         *ApiKey,
 	}
 	provider, err := openstack.AuthenticatedClient(opts)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return provider.TokenId
+	return provider.TokenID
 }
 
 func (bfb *BluefloodBuffer) send() {
@@ -76,9 +77,11 @@ func (bfb *BluefloodBuffer) send() {
 	req, err := http.NewRequest("POST", *BluefloodUrl, buf)
 	req.Header.Set("Content-Type", "application/json")
 
-	if UseAuth {
-		authToken := getAuthToken()
-		req.Header.Set("X-Auth-Token", authToken)
+	if *UseAuth {
+		if cachedToken == "" {
+			cachedToken = getAuthToken()
+		}
+		req.Header.Set("X-Auth-Token", cachedToken)
 	}
 
 	tr := &http.Transport{
