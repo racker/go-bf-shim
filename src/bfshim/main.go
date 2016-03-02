@@ -78,7 +78,7 @@ func (bfb *BluefloodBuffer) send() {
 
 	if UseAuth {
 		authToken := getAuthToken()
-		req.Header.set("X-Auth-Token", authToken)
+		req.Header.Set("X-Auth-Token", authToken)
 	}
 
 	tr := &http.Transport{
